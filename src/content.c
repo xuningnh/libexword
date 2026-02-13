@@ -219,12 +219,14 @@ int _save_user_key(char *name, char *key)
 	int i = 0;
 	const char *dir = get_data_dir();
 	if (dir == NULL)
+		printf("Warning - Failed to get data directory, user key will not be saved!\n");
 		return 0;
 	mkdir(dir, 0770);
 	file = mkpath(PATH_SEP, dir, "users.dat", NULL);
 	ret = read_file(file, &buffer, &length);
 	if (ret == -1 && errno != ENOENT) {
 		free(file);
+		printf("Warning - Failed to read user key file, user key will not be saved!\n");
 		return 0;
 	}
 	while (i < length) {
@@ -241,6 +243,7 @@ int _save_user_key(char *name, char *key)
 	memcpy(buffer + length + 1, name, str_len);
 	memcpy(buffer + length + 1 + str_len, key, 20);
 	ret = write_file(file, buffer, length + str_len + 21);
+	printf("ret = %d\n", ret);
 	free(file);
 	free(buffer);
 	return (ret == 0);
