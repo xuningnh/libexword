@@ -210,28 +210,53 @@ char * _get_dict_name(char *dir)
 	free(buffer);
 	return name;
 }
-static int mkdir_p(const char *path, mode_t mode)
+int mkdir_p(const char *path, mode_t mode)
 {
-    char *copypath = strdup(path);
-    char *p = copypath;
-    int ret = 0;
+    char *buf, *p;
+    int rc = 0;
 
-    while (*p != '\0') {
+    if (path == NULL || *path == '\0') {
+        errno = EINVAL;
+        return -1;
+    }
+
+    buf = strdup(path);
+    if (!buf)
+        return -1;
+
+    /* 忽略开头的分隔符 */
+    p = buf;
+#ifdef _WIN32
+    /* 跳过卷标 "C:" */
+    if (p[1] == ':')
+        p += 2;
+#endif
+    while (*p == '/' || *p == '\\')
+        p++;
+
+    for (; *p; ++p) {
         if (*p == '/' || *p == '\\') {
             *p = '\0';
-            if (mkdir(copypath, mode) != 0 && errno != EEXIST) {
-                ret = -1;
+            if (mkdir(buf, mode) != 0 && errno != EEXIST) {
+                rc = -1;
                 break;
             }
             *p = '/';
+            /* 跳过连续的分隔符 */
+            while (*p == '/' || *p == '\\')
+                ++p;
+            if (*p == '\0')
+                break;
         }
-        p++;
     }
-    if (ret == 0)
-        ret = mkdir(path, mode) != 0 && errno != EEXIST ? -1 : 0;
-    free(copypath);
-    return ret;
-}
+    if (rc == 0) {
+        if (mkdir(buf, mode) != 0 && errno != EEXIST)
+            rc = -1;
+    }
+
+    free(buf);
+    return rc;
+
 int _save_user_key(char *name, char *key)
 {
     char *buffer = NULL;

@@ -51,5 +51,5 @@ int write_file(const char* filename, char *buffer, int len);
 int read_file(const char* filename, char **buffer, int *len);
 const char * get_data_dir();
 char * mkpath(const char* separator, const char *base, ...);
-
+int mkdir_p(const char *path, mode_t mode);
 #endif
