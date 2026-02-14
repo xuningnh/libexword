@@ -553,86 +553,113 @@ int content_remove(struct state *s, char *root, char *id)
 
 int content_install(struct state *s, char *root, char *id)
 {
-	DIR *dhandle;
-	struct dirent *entry;
-	admini_t info;
-	exword_cryptkey_t ck;
-	exword_capacity_t cap;
-	int rsp;
-	char *name;
-	char *path;
-	char *filename;
-	char *dir;
-	struct stat buf;
-	int size;
-	memset(&ck, 0, sizeof(exword_cryptkey_t));
-	memcpy(ck.blk1, key1, 2);
-	memcpy(ck.blk1 + 10, key1 + 10, 2);
-	memcpy(ck.blk2, key1 + 2, 8);
-	memcpy(ck.blk2 + 8, key1 + 12, 4);
-	if (_find(s->device, root, id, &info)) {
-		printf("Content with id %s already installed.\n", id);
-		return 0;
-	}
-	if (s->mode == EXWORD_MODE_CD)
-		dir = mkpath(PATH_SEP, get_data_dir(), "sound", id, NULL);
-	else
-		dir = mkpath(PATH_SEP, get_data_dir(), region_id2str(s->region), id, NULL);
-	dhandle = opendir(dir);
-	if (dhandle == NULL) {
-		printf("Can find dictionary directory %s.\n", id);
-		free(dir);
-		return 0;
-	}
-	size = _get_size(dir);
-	rsp = exword_get_capacity(s->device, &cap);
-	if (rsp != EXWORD_SUCCESS || size >= cap.free || size < 0) {
-		printf("Insufficent space on device.\n");
-		free(dir);
-		closedir(dhandle);
-		return 0;
-	}
-	if (s->mode == EXWORD_MODE_CD)
-		name = _get_cd_name(dir);
-	else
-		name = _get_dict_name(dir);
-	if (name == NULL) {
-		printf("%s: can't determine name\n", id);
-		free(dir);
-		return 0;
-	}
-	rsp = exword_unlock(s->device);
-	rsp |= exword_cname(s->device, name, id);
-	rsp |= exword_cryptkey(s->device, &ck);
-	free(name);
-	if (rsp == EXWORD_SUCCESS) {
-		if (s->mode == EXWORD_MODE_CD)
-			path = mkpath("\\", root, id, NULL);
-		else
-			path = mkpath("\\", root, id, "_CONTENT", NULL);
-		exword_setpath(s->device, path, 1);
-		free(path);
-		while ((entry = readdir(dhandle)) != NULL) {
-			if (!is_valid_sfn(entry->d_name))
-				continue;
-			filename = mkpath(PATH_SEP, dir, entry->d_name, NULL);
-			if (stat(filename, &buf) == 0 && S_ISREG(buf.st_mode)) {
-				printf("Transferring %s...", entry->d_name);
-				if (_upload_file(s->device, dir, entry->d_name, ck.xorkey))
-					printf("Done\n");
-				else
-					printf("Failed\n");
-			}
-			free(filename);
-		}
-		closedir(dhandle);
-		if (s->mode == EXWORD_MODE_LIBRARY) {
-			path = mkpath("\\", root, id, "_USER", NULL);
-			exword_setpath(s->device, path, 1);
-			free(path);
-		}
-	}
-	free(dir);
-	rsp |= exword_lock(s->device);
-	return (rsp == EXWORD_SUCCESS);
+    DIR *dhandle;
+    struct dirent *entry;
+    admini_t info;
+    exword_cryptkey_t ck;
+    exword_capacity_t cap;
+    int rsp;
+    char *name;
+    char *path;
+    char *filename;
+    char *dir;
+    struct stat buf;
+    int size;
+
+    /* 日志：输入参数 */
+    printf("[install] root='%s' id='%s' mode=%d region=%d\n",
+           root, id, s->mode, s->region);
+
+    memset(&ck, 0, sizeof(exword_cryptkey_t));
+    memcpy(ck.blk1, key1, 2);
+    memcpy(ck.blk1 + 10, key1 + 10, 2);
+    memcpy(ck.blk2, key1 + 2, 8);
+    memcpy(ck.blk2 + 8, key1 + 12, 4);
+
+    if (_find(s->device, root, id, &info)) {
+        printf("[install] already installed\n");
+        printf("Content with id %s already installed.\n", id);
+        return 0;
+    }
+
+    if (s->mode == EXWORD_MODE_CD)
+        dir = mkpath(PATH_SEP, get_data_dir(), "sound", id, NULL);
+    else
+        dir = mkpath(PATH_SEP, get_data_dir(),
+                     region_id2str(s->region), id, NULL);
+
+    printf("[install] local directory = '%s'\n", dir);
+    dhandle = opendir(dir);
+    if (dhandle == NULL) {
+        printf("[install] opendir('%s') failed: %s\n",
+               dir, strerror(errno));
+        printf("Can't find dictionary directory %s.\n", id);
+        free(dir);
+        return 0;
+    }
+
+    size = _get_size(dir);
+    rsp = exword_get_capacity(s->device, &cap);
+    printf("[install] local size=%d, device free=%d, rsp=%d\n",
+           size, cap.free, rsp);
+    if (rsp != EXWORD_SUCCESS || size >= cap.free || size < 0) {
+        printf("Insufficent space on device.\n");
+        free(dir);
+        closedir(dhandle);
+        return 0;
+    }
+
+    if (s->mode == EXWORD_MODE_CD)
+        name = _get_cd_name(dir);
+    else
+        name = _get_dict_name(dir);
+
+    printf("[install] dictionary name='%s'\n", name ? name : "(null)");
+    if (name == NULL) {
+        printf("%s: can't determine name\n", id);
+        free(dir);
+        return 0;
+    }
+
+    rsp = exword_unlock(s->device);
+    rsp |= exword_cname(s->device, name, id);
+    rsp |= exword_cryptkey(s->device, &ck);
+    free(name);
+
+    if (rsp == EXWORD_SUCCESS) {
+        if (s->mode == EXWORD_MODE_CD)
+            path = mkpath("\\", root, id, NULL);
+        else
+            path = mkpath("\\", root, id, "_CONTENT", NULL);
+        printf("[install] setting device path '%s'\n", path);
+        exword_setpath(s->device, path, 1);
+        free(path);
+
+        while ((entry = readdir(dhandle)) != NULL) {
+            if (!is_valid_sfn(entry->d_name))
+                continue;
+            filename = mkpath(PATH_SEP, dir, entry->d_name, NULL);
+            if (stat(filename, &buf) == 0 && S_ISREG(buf.st_mode)) {
+                printf("Transferring %s...", entry->d_name);
+                printf("[install] upload '%s'\n", filename);
+                if (_upload_file(s->device, dir, entry->d_name, ck.xorkey))
+                    printf("Done\n");
+                else
+                    printf("Failed\n");
+            }
+            free(filename);
+        }
+        closedir(dhandle);
+        if (s->mode == EXWORD_MODE_LIBRARY) {
+            path = mkpath("\\", root, id, "_USER", NULL);
+            printf("[install] setting _USER path '%s'\n", path);
+            exword_setpath(s->device, path, 1);
+            free(path);
+        }
+    }
+
+    free(dir);
+    rsp |= exword_lock(s->device);
+    printf("[install] finished, rsp=%d\n", rsp);
+    return (rsp == EXWORD_SUCCESS);
 }
