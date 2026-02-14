@@ -213,40 +213,58 @@ char * _get_dict_name(char *dir)
 
 int _save_user_key(char *name, char *key)
 {
-	char *buffer;
-	char *file;
-	int length, ret, str_len;
-	int i = 0;
-	const char *dir = get_data_dir();
-	if (dir == NULL)
-		printf("Warning - Failed to get data directory, user key will not be saved!\n");
-		return 0;
-	mkdir(dir, 0770);
-	file = mkpath(PATH_SEP, dir, "users.dat", NULL);
-	ret = read_file(file, &buffer, &length);
-	if (ret == -1 && errno != ENOENT) {
-		free(file);
-		printf("Warning - Failed to read user key file, user key will not be saved!\n");
-		return 0;
-	}
-	while (i < length) {
-		if (strcmp(name, buffer + i + 1) == 0) {
-			free(file);
-			free(buffer);
-			return 1;
-		}
-		i += 21 + *(buffer + i);
-	}
-	str_len = strlen(name) + 1;
-	buffer = xrealloc(buffer, length + str_len + 21);
-	buffer[length] = str_len;
-	memcpy(buffer + length + 1, name, str_len);
-	memcpy(buffer + length + 1 + str_len, key, 20);
-	ret = write_file(file, buffer, length + str_len + 21);
-	printf("ret = %d\n", ret);
-	free(file);
-	free(buffer);
-	return (ret == 0);
+    char *buffer = NULL;
+    char *file;
+    int length = 0, ret, str_len;
+    int i = 0;
+    const char *dir = get_data_dir();
+
+    if (dir == NULL) {
+        printf("Warning - Failed to get data directory, user key will not be saved!\n");
+        return 0;
+    }
+    mkdir(dir, 0770);
+
+    file = mkpath(PATH_SEP, dir, "users.dat", NULL);
+    ret = read_file(file, &buffer, &length);
+    if (ret == -1) {
+        if (errno == ENOENT) {
+            /* 文件不存在，初始化为空缓冲区/长度 */
+            buffer = NULL;
+            length = 0;
+        } else {
+            free(file);
+            printf("Warning - Failed to read user key file, user key will not be saved!\n");
+            return 0;
+        }
+    }
+
+    /* 安全遍历已存在的记录：每条记录格式：1字节 name_len, name(name_len bytes incl. '\0'), 20字节 key */
+    while (i + 1 < length) {
+        unsigned char name_len = (unsigned char)buffer[i];
+        /* 检查整条记录是否在缓冲区内 */
+        if ((int)(i + 1 + name_len + 20) > length)
+            break;
+        if (strcmp(name, buffer + i + 1) == 0) {
+            free(file);
+            free(buffer);
+            return 1;
+        }
+        i += 1 + name_len + 20;
+    }
+
+    str_len = strlen(name) + 1;
+    /* 扩展缓冲区：1 + str_len + 20 字节的新记录 */
+    buffer = xrealloc(buffer, length + 1 + str_len + 20);
+    buffer[length] = (unsigned char)str_len;
+    memcpy(buffer + length + 1, name, str_len);
+    memcpy(buffer + length + 1 + str_len, key, 20);
+
+    ret = write_file(file, buffer, length + 1 + str_len + 20);
+    printf("ret = %d\n", ret);
+    free(file);
+    free(buffer);
+    return (ret == 0);
 }
 
 int _load_user_key(char *name, char *key)
