@@ -214,16 +214,19 @@ char * _get_dict_name(char *dir)
 int _save_user_key(char *name, char *key)
 {
     char *buffer = NULL;
-    char *file;
-    int length = 0, ret, str_len;
+    char *file = NULL;
+    int length = 0, ret = -1, str_len;
     int i = 0;
     const char *dir = get_data_dir();
 
     if (dir == NULL) {
-        printf("Warning - Failed to get data directory, user key will not be saved!\n");
+        fprintf(stderr, "_save_user_key: get_data_dir() failed\n");
         return 0;
     }
-    mkdir(dir, 0770);
+    if (mkdir(dir, 0770) != 0 && errno != EEXIST) {
+        fprintf(stderr, "_save_user_key: mkdir('%s') failed: %s\n", dir, strerror(errno));
+        return 0;
+    }
 
     file = mkpath(PATH_SEP, dir, "users.dat", NULL);
     ret = read_file(file, &buffer, &length);
@@ -233,40 +236,44 @@ int _save_user_key(char *name, char *key)
             buffer = NULL;
             length = 0;
         } else {
+            fprintf(stderr, "_save_user_key: read_file('%s') failed: %s\n", file, strerror(errno));
             free(file);
-            printf("Warning - Failed to read user key file, user key will not be saved!\n");
             return 0;
         }
     }
 
-    /* 安全遍历已存在的记录：每条记录格式：1字节 name_len, name(name_len bytes incl. '\0'), 20字节 key */
+    /* 安全遍历已存在的记录：1 字节 name_len, name(name_len bytes incl. '\0'), 20 字节 key */
     while (i + 1 < length) {
-        unsigned char name_len = (unsigned char)buffer[i];
-        /* 检查整条记录是否在缓冲区内 */
-        if ((int)(i + 1 + name_len + 20) > length)
+        unsigned char stored_len = (unsigned char)buffer[i];
+        if ((int)(i + 1 + stored_len + 20) > length)
             break;
-        if (strcmp(name, buffer + i + 1) == 0) {
+        /* 使用长度比较，stored_len 包含终止 '\0' */
+        if ((int)stored_len == (int)(strlen(name) + 1) &&
+            memcmp(name, buffer + i + 1, stored_len) == 0) {
             free(file);
             free(buffer);
             return 1;
         }
-        i += 1 + name_len + 20;
+        i += 1 + stored_len + 20;
     }
 
     str_len = strlen(name) + 1;
-    /* 扩展缓冲区：1 + str_len + 20 字节的新记录 */
-    buffer = xrealloc(buffer, length + 1 + str_len + 20);
+    int newlen = length + 1 + str_len + 20;
+    buffer = xrealloc(buffer, newlen);
     buffer[length] = (unsigned char)str_len;
     memcpy(buffer + length + 1, name, str_len);
     memcpy(buffer + length + 1 + str_len, key, 20);
 
-    ret = write_file(file, buffer, length + 1 + str_len + 20);
-    printf("ret = %d\n", ret);
+    ret = write_file(file, buffer, newlen);
+    if (ret != 0) {
+        fprintf(stderr, "_save_user_key: write_file('%s') failed: %s\n", file, strerror(errno));
+    } else {
+        printf("ret = %d\n", ret);
+    }
     free(file);
     free(buffer);
     return (ret == 0);
 }
-
 int _load_user_key(char *name, char *key)
 {
 	char *buffer;
