@@ -210,7 +210,28 @@ char * _get_dict_name(char *dir)
 	free(buffer);
 	return name;
 }
+static int mkdir_p(const char *path, mode_t mode)
+{
+    char *copypath = strdup(path);
+    char *p = copypath;
+    int ret = 0;
 
+    while (*p != '\0') {
+        if (*p == '/' || *p == '\\') {
+            *p = '\0';
+            if (mkdir(copypath, mode) != 0 && errno != EEXIST) {
+                ret = -1;
+                break;
+            }
+            *p = '/';
+        }
+        p++;
+    }
+    if (ret == 0)
+        ret = mkdir(path, mode) != 0 && errno != EEXIST ? -1 : 0;
+    free(copypath);
+    return ret;
+}
 int _save_user_key(char *name, char *key)
 {
     char *buffer = NULL;
@@ -223,8 +244,8 @@ int _save_user_key(char *name, char *key)
         fprintf(stderr, "_save_user_key: get_data_dir() failed\n");
         return 0;
     }
-    if (mkdir(dir, 0770) != 0 && errno != EEXIST) {
-        fprintf(stderr, "_save_user_key: mkdir('%s') failed: %s\n", dir, strerror(errno));
+    if (mkdir_p(dir, 0770) != 0 && errno != EEXIST) {
+        fprintf(stderr, "_save_user_key: mkdir_p('%s') failed: %s\n", dir, strerror(errno));
         return 0;
     }
 
