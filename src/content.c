@@ -256,7 +256,7 @@ int mkdir_p(const char *path, mode_t mode)
 
     free(buf);
     return rc;
-
+}
 int _save_user_key(char *name, char *key)
 {
     char *buffer = NULL;
