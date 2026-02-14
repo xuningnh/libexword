@@ -298,45 +298,76 @@ char * mkpath(const char* separator, const char *base, ...)
 	return path;
 }
 
+// ...existing code...
 int read_file(const char* filename, char **buffer, int *len)
 {
-	int fd, err;
-	struct stat buf;
-	*buffer = NULL;
-	*len = 0;
-	fd = open(filename, O_RDONLY | O_BINARY);
-	if (fd < 0)
-		return -1;
-	fstat(fd, &buf);
-	*buffer = xmalloc(buf.st_size);
-	*len = read(fd, *buffer, buf.st_size);
-	if (*len < 0) {
-		err = errno;
-		free(*buffer);
-		*buffer = NULL;
-		*len = 0;
-		close(fd);
-		errno = err;
-		return -1;
-	}
-	close(fd);
-	return 0;
+    int fd, err;
+    struct stat buf;
+    *buffer = NULL;
+    *len = 0;
+    fd = open(filename, O_RDONLY | O_BINARY);
+    if (fd < 0) {
+        fprintf(stderr, "read_file: open('%s') failed: %s\n", filename, strerror(errno));
+        return -1;
+    }
+    if (fstat(fd, &buf) != 0) {
+        err = errno;
+        close(fd);
+        fprintf(stderr, "read_file: fstat('%s') failed: %s\n", filename, strerror(err));
+        errno = err;
+        return -1;
+    }
+    if (buf.st_size == 0) {
+        *buffer = NULL;
+        *len = 0;
+        close(fd);
+        return 0;
+    }
+    *buffer = xmalloc(buf.st_size);
+    *len = read(fd, *buffer, buf.st_size);
+    if (*len < 0) {
+        err = errno;
+        free(*buffer);
+        *buffer = NULL;
+        *len = 0;
+        close(fd);
+        fprintf(stderr, "read_file: read('%s') failed: %s\n", filename, strerror(err));
+        errno = err;
+        return -1;
+    }
+    if (*len != (int)buf.st_size) {
+        fprintf(stderr, "read_file: short read('%s'): expected %lld bytes, got %d\n",
+            filename, (long long)buf.st_size, *len);
+        /* 仍返回成功，但将 len 设为实际读取的字节数 */
+    }
+    close(fd);
+    return 0;
 }
 
 int write_file(const char* filename, char *buffer, int len)
 {
-	int fd, ret, err;
-	struct stat buf;
-	fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, S_IRUSR | S_IWUSR);
-	if (fd < 0)
-		return -1;
-	ret = write(fd, buffer, len);
-	if (ret < 0) {
-		err = errno;
-		close(fd);
-		errno = err;
-		return -1;
-	}
-	close(fd);
-	return 0;
+    int fd, ret, err;
+    fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, S_IRUSR | S_IWUSR);
+    if (fd < 0) {
+        fprintf(stderr, "write_file: open('%s') failed: %s\n", filename, strerror(errno));
+        return -1;
+    }
+    ret = write(fd, buffer, len);
+    if (ret < 0) {
+        err = errno;
+        close(fd);
+        fprintf(stderr, "write_file: write('%s') failed: %s\n", filename, strerror(err));
+        errno = err;
+        return -1;
+    }
+    if (ret != len) {
+        /* 部分写入视为错误 */
+        close(fd);
+        fprintf(stderr, "write_file: short write('%s'): wrote %d of %d bytes\n", filename, ret, len);
+        errno = EIO;
+        return -1;
+    }
+    close(fd);
+    return 0;
 }
+// ...existing code...
