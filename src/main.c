@@ -307,6 +307,21 @@ void connect(struct state *s)
 		} else {
 			if (exword_setpath(s->device, "", 0) == EXWORD_SUCCESS) {
 				if (exword_list(s->device, &entries, &count) == EXWORD_SUCCESS) {
+	                    /* Log entries returned by device for debugging */
+	                    if (count > 0) {
+	                        int ei, bi;
+	                        printf("Device returned %u directory entries:\n", count);
+	                        for (ei = 0; ei < count; ++ei) {
+	                            if (ENTRY_IS_UNICODE(&entries[ei])) {
+	                                printf("  [%d] (unicode, size=%u, flags=0x%02x): ", ei, entries[ei].size, entries[ei].flags);
+	                                for (bi = 0; bi < entries[ei].size; ++bi)
+	                                    printf("%02x", entries[ei].name[bi]);
+	                                printf("\n");
+	                            } else {
+	                                printf("  [%d] (flags=0x%02x): %s\n", ei, entries[ei].flags, entries[ei].name);
+	                            }
+	                        }
+	                    }
 					dev_list_scan(&(s->dev_list), entries);
 					exword_free_list(entries);
 				}
