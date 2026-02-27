@@ -1,5 +1,3 @@
-<title>Casio Dictionary Firmware Tools</title>
-
 # 个人经验总结
 
 卡西欧的电子词典十分好用，但是价格昂贵，很多人难以一步到位直接买旗舰机，目前能廉价提升手头电子词典价值的方法主要分两种：
