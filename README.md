@@ -14,12 +14,12 @@
 
 ## 前期准备
 -   **TF卡（可选）**: 准备一张2Ｇ左右的TF卡，较新机型可能支持的容量更大，我目前的词典支持上限仅2G但已经绰绰有余（机身自带容量较小只能安装少量词典）
--  **词典文件**: 从GitHub仓库(https://github.com/dictdump/dictdump)下载附加词典文件，词典文件在`addons-on-dictionary`目录下
+- 词典文件：从GitHub仓库 [dictdump](https://github.com/dictdump/dictdump) 下载附加词典文件，词典文件在`addons-on-dictionary`目录下
     - **addons-on-dictionary**: 存放附加词典
         -   **addons-for-cn**: 仅用于国行词典
         -   `addons-for-ja`: 仅用于日版词典
--  **虚拟机**: 我使用的系统是*Ubuntu 24.04.4 LTS*，建议都用Ubuntu 24.04的版本，其他版本过程可能略有差异
--  **libexword**(https://github.com/xuningnh/libexword): 这是我fork的很早期的开源工具，原工具在现在的Ubuntu 24.04上无法良好运行，适当做了一点修改，如果你的词典型号在**models.txt**里有记录，说明已经验证过可以直接使用，如果没有，可以尝试使用较新一点的`libexword-re`(https://github.com/caesarw/libexword-re)
+-  虚拟*: 我使用的系统是*Ubuntu 24.04.4 LTS*，建议都用Ubuntu 24.04的版本，其他版本过程可能略有差异
+-  libexword工具：[libexword](https://github.com/xuningnh/libexword): 这是我fork的很早期的开源工具，原工具在现在的Ubuntu 24.04上无法良好运行，适当做了一点修改，如果你的词典型号在**models.txt**里有记录，说明已经验证过可以直接使用，如果没有，可以尝试使用较新一点的 [libexword-re](https://github.com/caesarw/libexword-re)
 
 
 ## 新增附加词典步骤
