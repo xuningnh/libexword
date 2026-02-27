@@ -3,7 +3,7 @@
  * Most of this code was borrowed and adopted from OpenOBEX to work with
  * the casio EX-word dictionaries
  *
- * Copyright (C) 2010 - Brian Johnson <brijohn@gmail.com>
+ * Copyright (C) 2010-2018 - Brian Johnson <brijohn@gmail.com>
  * Copyright (c) 1999, 2000 Pontus Fuchs, All Rights Reserved.
  * Copyright (c) 1999, 2000 Dag Brattli, All Rights Reserved.
  *
@@ -29,8 +29,6 @@
 #include <libusb.h>
 #include <inttypes.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include "list.h"
 #include "databuffer.h"
@@ -168,6 +166,7 @@ typedef struct _obex {
 	uint8_t intf_num;
 	uint8_t read_endpoint_address;
 	uint8_t write_endpoint_address;
+	uint8_t interrupt_endpoint_address;
 	uint8_t version;
 	uint8_t locale;
 	uint16_t mtu_rx;
@@ -276,9 +275,9 @@ void obex_set_connect_info(obex_t *self, uint8_t ver, uint8_t locale);
 void obex_register_callback(obex_t *self, obex_callback cb, void * userdata);
 obex_object_t * obex_object_new(obex_t *self, uint8_t cmd);
 int obex_object_delete(obex_t *self, obex_object_t *object);
-int obex_object_add_header(obex_t *self, obex_object_t *object,
-			   uint8_t hi, obex_headerdata_t hv, uint32_t hv_size,
-			   unsigned int flags);
+int obex_object_addheader(obex_t *self, obex_object_t *object,
+			  uint8_t hi, obex_headerdata_t hv, uint32_t hv_size,
+			  unsigned int flags);
 int obex_object_getnextheader(obex_t *self, obex_object_t *object,
 			      uint8_t *hi, obex_headerdata_t *hv, uint32_t *hv_size);
 int obex_object_set_nonhdr_data(obex_object_t *object, const uint8_t *buffer, unsigned int len);

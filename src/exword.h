@@ -25,78 +25,142 @@
 
 typedef struct exword_t exword_t;
 
-#define SD_CARD		"\\_SD_00"
-#define INTERNAL_MEM	"\\_INTERNAL_00"
-#define ROOT		""
 
-#define LIST_F_DIR     1
-#define LIST_F_UNICODE 2
-
-/** @ingroup device
- * Japanese Region
+/** @def ENTRY_IS_UNICODE
+ * @ingroup cmd
+ * Test if list entry is stored as a unicode string.
+ * @param entry pointer to an \ref exword_dirent_t structure
+ * @returns returns true if entry name is stored in UTF16 format false otherwise
  */
-#define LOCALE_JA      0x20
-/** @ingroup device
- * Korean Region
+#define ENTRY_IS_UNICODE(entry) (((entry)->flags & 2) != 0)
+/** @def ENTRY_IS_DIRECTORY
+ * @ingroup cmd
+ * Test if list entry is a directory.
+ * @param entry pointer to an \ref exword_dirent_t structure
+ * @returns returns true if entry is a directory false otherwise
  */
-#define LOCALE_KR      0x40
-/** @ingroup device
- * Chinese Region
- */
-#define LOCALE_CN      0x60
-/** @ingroup device
- * German Region
- */
-#define LOCALE_DE      0x80
-/** @ingroup device
- * Spanish Region
- */
-#define LOCALE_ES      0xa0
-/** @ingroup device
- * French Region
- */
-#define LOCALE_FR      0xc0
-/** @ingroup device
- * Russian Region
- */
-#define LOCALE_RU      0xe0
+#define ENTRY_IS_DIRECTORY(entry) (((entry)->flags & 1) != 0)
 
 /** @ingroup device
- *  Opens device in library mode.
- *  This mode is used to install and remove add-on dictionaries.
+ * EX-word regions.
+ * One of these regions must be specified when calling \ref exword_connect.
  */
-#define OPEN_LIBRARY   0x0000
+enum exword_region {
+	/** Japanese Region */
+	EXWORD_REGION_JA = 0x20,
+
+	/** Korean Region */
+	EXWORD_REGION_KR = 0x40,
+
+	/** Italian Region */
+	EXWORD_REGION_IT = 0x48,
+
+	/** Chinese Region */
+	EXWORD_REGION_CN = 0x60,
+
+	/** Indian Region */
+	EXWORD_REGION_IN = 0x68,
+
+	/** German Region */
+	EXWORD_REGION_DE = 0x80,
+
+	/** Spanish Region */
+	EXWORD_REGION_ES = 0xa0,
+
+	/** French Region */
+	EXWORD_REGION_FR = 0xc0,
+
+	/** Russian Region */
+	EXWORD_REGION_RU = 0xe0,
+};
+
 /** @ingroup device
- *  Opens device in text mode.
- *  This mode is used to upload and delete text files.
+ * EX-word modes.
+ * One of these modes must be specified when calling \ref exword_connect.
  */
-#define OPEN_TEXT      0x0100
-/** @ingroup device
- *  Opens device in CD mode.
- *  This mode is used to upload cd audio.
- */
-#define OPEN_CD        0x0200
+enum exword_mode {
+	/** This mode is used to install and remove add-on dictionaries.*/
+	EXWORD_MODE_LIBRARY = 0x0100,
+
+	/** This mode is used to upload and delete text files. */
+	EXWORD_MODE_TEXT    = 0x0200,
+
+	/** This mode is used to upload cd audio. */
+	EXWORD_MODE_CD      = 0x0400,
+};
 
 /** @ingroup cmd
- * SW capability
+ * EX-word capabilities.
+ * Capability bitmasks returned by \ref exword_get_model.
  */
-#define CAP_SW         (1 << 0)
-/** @ingroup cmd
- * P capability
+enum exword_capability {
+	/** SW capability */
+	CAP_SW  = (1 << 0),
+
+	/** P capability */
+	CAP_P   = (1 << 1),
+
+	/** F capability */
+	CAP_F   = (1 << 2),
+
+	/** C capability */
+	CAP_C   = (1 << 3),
+
+	/** C2 capability */
+	CAP_C2  = (1 << 4),
+
+	/** ST capability */
+	CAP_ST	= (1 << 5),
+
+	/** T capability */
+	CAP_T	= (1 << 6),
+
+	/** C3 capability */
+	CAP_C3	= (1 << 7),
+
+	/** Device contains extended model information */
+	CAP_EXT = (1 << 15),
+};
+
+/** @ingroup misc
+ * Error codes.
+ * Most libexword functions return 0 on success or one of these error codes.
  */
-#define CAP_P          (1 << 1)
-/** @ingroup cmd
- * F capability
+enum exword_error {
+	/** Success (no error) */
+	EXWORD_SUCCESS = 0,
+
+	/** Access denied */
+	EXWORD_ERROR_FORBIDDEN,
+
+	/** File not found */
+	EXWORD_ERROR_NOT_FOUND,
+
+	/** Internal Error */
+	EXWORD_ERROR_INTERNAL,
+
+	/** Insufficient memory */
+	EXWORD_ERROR_NO_MEM,
+
+	/** Other error */
+	EXWORD_ERROR_OTHER,
+};
+
+/** @ingroup device
+ * Disconnect codes.
+ * These codes sent to the application by the disconnect notification handler.
  */
-#define CAP_F          (1 << 2)
-/** @ingroup cmd
- * C capability
- */
-#define CAP_C          (1 << 3)
-/** @ingroup cmd
- * Device contains extended model information
- */
-#define CAP_EXT        (1 << 15)
+enum exword_disconnect {
+	/** Normal disconnect */
+	EXWORD_DISCONNECT_NORMAL = 1,
+
+	/** Disconnect due to cable being unplugged */
+	EXWORD_DISCONNECT_UNPLUGGED = 2,
+
+	/** Disconnect due to internal server error */
+	EXWORD_DISCONNECT_ERROR = 4,
+};
+
 
 /**
  * Structure representing a directory entry.
@@ -123,9 +187,9 @@ typedef struct {
 #pragma pack(1)
 typedef struct {
 	/** total space (in bytes) */
-	uint32_t total;
+	uint64_t total;
 	/** space available (in bytes) */
-	uint32_t free;
+	uint64_t free;
 } exword_capacity_t;
 #pragma pack()
 
@@ -135,7 +199,7 @@ typedef struct {
 #pragma pack(1)
 typedef struct {
 	/** Main model string */
-	char model[15];
+	char model[14];
 	/** sub model string */
 	char sub_model[6];
 	/** extended model string (DP5+) */
@@ -189,35 +253,55 @@ typedef struct {
 	/** Input block 2 */
 	unsigned char blk2[12];
 	/** Generated CryptKey */
-	unsigned char key[12];
+	unsigned char key[16];
+	/** Generated XOR Encryption key */
+	unsigned char xorkey[16];
 } exword_cryptkey_t;
 #pragma pack()
 
 /** @ingroup misc
- * File transfer callback function,
+ * File transfer callback function.
  * @param filename name of file currently being transferred
  * @param transferred number of bytes transferred so far
  * @param length total length of file
- * @param user_data data pointer specified in \ref exword_register_callbacks
- * @see exword_register_callbacks
+ * @param user_data data pointer specified in \ref exword_register_xfer_callbacks
+ * @see exword_register_xfer_callbacks
  */
 typedef void (*file_cb)(char *filename, uint32_t transferred, uint32_t length, void *user_data);
+
+/** @ingroup device
+ * Disconnect notification function.
+ * @param reason reason for disconnection
+ * @param user_data data pointer specified in \ref exword_register_disconnect_callback
+ * @see exword_register_disconnect_callback
+ */
+typedef void (*disconnect_cb)(int reason, void *user_data);
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 char * convert_to_locale(char *fmt, char **dst, int *dstsz, const char *src, int srcsz);
-char * utf16_to_locale(char **dst, int *dstsz, const char *src, int srcsz);
-char * locale_to_utf16(char **dst, int *dstsz, const char *src, int srcsz);
-char * exword_response_to_string(int rsp);
+char * convert_from_locale(char *fmt, char **dst, int *dstsz, const char *src, int srcsz);
+
+void get_xor_key(char *key, long size, char *xorkey);
+void crypt_data(char *data, int size, char *key);
+
+char * exword_error_to_string(int code);
+
+exword_t * exword_init();
+void exword_deinit(exword_t *self);
+int exword_is_connected(exword_t *self);
 void exword_set_debug(exword_t *self, int level);
-void exword_register_callbacks(exword_t *self, file_cb get, file_cb put, void *userdata);
-void exword_free_list(exword_dirent_t *entries);
-exword_t * exword_open();
-exword_t * exword_open2(uint16_t options);
-void exword_close(exword_t *self);
-int exword_connect(exword_t *self);
+int exword_get_debug(exword_t *self);
+void exword_register_xfer_callbacks(exword_t *self, file_cb get, void *get_data, file_cb put, void *put_data);
+void exword_register_xfer_get_callback(exword_t *self, file_cb callback, void *userdata);
+void exword_register_xfer_put_callback(exword_t *self, file_cb callback, void *userdata);
+void exword_register_disconnect_callback(exword_t *self, disconnect_cb disconnect, void *userdata);
+void exword_poll_disconnect(exword_t *self);
+
+int exword_connect(exword_t *self, uint16_t options);
+int exword_disconnect(exword_t *self);
 int exword_send_file(exword_t *self, char* filename, char *buffer, int len);
 int exword_get_file(exword_t *self, char* filename, char **buffer, int *len);
 int exword_remove_file(exword_t *self, char* filename, int convert_to_unicode);
@@ -226,6 +310,7 @@ int exword_get_capacity(exword_t *self, exword_capacity_t *cap);
 int exword_sd_format(exword_t *self);
 int exword_setpath(exword_t *self, uint8_t *path, uint8_t mkdir);
 int exword_list(exword_t *self, exword_dirent_t **entries, uint16_t *count);
+void exword_free_list(exword_dirent_t *entries);
 int exword_userid(exword_t *self, exword_userid_t id);
 int exword_cryptkey(exword_t *self, exword_cryptkey_t *key);
 int exword_cname(exword_t *self, char *name, char* dir);
@@ -233,7 +318,6 @@ int exword_unlock(exword_t *self);
 int exword_lock(exword_t *self);
 int exword_authchallenge(exword_t *self, exword_authchallenge_t challenge);
 int exword_authinfo(exword_t *self, exword_authinfo_t *info);
-int exword_disconnect(exword_t *self);
 
 #ifdef __cplusplus
 }

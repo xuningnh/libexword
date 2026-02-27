@@ -3,7 +3,7 @@
  * Most of this code was borrowed and adopted from OpenOBEX to work with
  * the casio EX-word dictionaries
  *
- * Copyright (C) 2010 - Brian Johnson <brijohn@gmail.com>
+ * Copyright (C) 2010-2018 - Brian Johnson <brijohn@gmail.com>
  * Copyright (c) 1999, 2000 Pontus Fuchs, All Rights Reserved.
  * Copyright (c) 1999, 2000 Dag Brattli, All Rights Reserved.
  *
@@ -23,6 +23,11 @@
  *
  *
  */
+
+#include <arpa/inet.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "obex.h"
 
 static int obex_bulk_read(obex_t *self, buf_t *msg)
@@ -106,6 +111,10 @@ static int obex_claim_interface(obex_t *ctx)
 					else if (!ctx->write_endpoint_address &&
 						 (ep_desc->bEndpointAddress & 0x80) == LIBUSB_ENDPOINT_OUT)
 						ctx->write_endpoint_address = ep_desc->bEndpointAddress;
+				} else if ((ep_desc->bmAttributes & 3) == LIBUSB_TRANSFER_TYPE_INTERRUPT) {
+					if (!ctx->interrupt_endpoint_address &&
+					    (ep_desc->bEndpointAddress & 0x80) == LIBUSB_ENDPOINT_IN)
+						ctx->interrupt_endpoint_address = ep_desc->bEndpointAddress;
 				}
 			}
 			if (ctx->read_endpoint_address && ctx->write_endpoint_address)
@@ -197,7 +206,7 @@ static int obex_object_receive_body(obex_object_t *object, buf_t *msg, uint8_t h
 	DEBUG(object->context, 4, "This is a body-header. Len=%d\n", len);
 
 	if (len > msg->data_size) {
-		DEBUG(object->context, 1, "Header %d to big. HSize=%d Buffer=%d\n",
+		DEBUG(object->context, 1, "Header %d to big. HSize=%d Buffer=%zd\n",
 				hi, len, msg->data_size);
 		return -1;
 	}
@@ -264,7 +273,7 @@ static int obex_object_send(obex_t *self, obex_object_t *object)
 
 	/* Add nonheader-data first if any (SETPATH, CONNECT)*/
 	if (object->tx_nonhdr_data) {
-		DEBUG(self, 4, "Adding %d bytes of non-headerdata\n", object->tx_nonhdr_data->data_size);
+		DEBUG(self, 4, "Adding %zd bytes of non-headerdata\n", object->tx_nonhdr_data->data_size);
 		buf_insert_end(txmsg, object->tx_nonhdr_data->data, object->tx_nonhdr_data->data_size);
 
 		buf_free(object->tx_nonhdr_data);
@@ -329,7 +338,7 @@ static int obex_object_send(obex_t *self, obex_object_t *object)
 	hdr->len = htons((uint16_t)txmsg->data_size - 1);
 
 	DUMPBUFFER(self, "Tx", txmsg);
-	DEBUG(self, 1, "len = %d bytes\n", txmsg->data_size);
+	DEBUG(self, 1, "len = %zd bytes\n", txmsg->data_size);
 
 	actual = obex_bulk_write(self, txmsg);
 	if (actual < 0) {
@@ -366,7 +375,7 @@ int obex_object_receive(obex_t *self, obex_object_t *object)
 
 	hdr = (struct obex_rsp_hdr *) msg->data;
 	/* New data has been inserted at the end of message */
-	DEBUG(self, 4, "Got %d bytes msg len=%d\n", ret, msg->data_size);
+	DEBUG(self, 4, "Got %d bytes msg len=%zd\n", ret, msg->data_size);
 
 	/*
 	 * Make sure that the buffer we have, actually has the specified
@@ -376,7 +385,7 @@ int obex_object_receive(obex_t *self, obex_object_t *object)
 	length = ntohs(hdr->len);
 	/* Make sure we have a whole packet. Should not happen due to reading the entire MTU in*/
 	if (length > msg->data_size) {
-		DEBUG(self, 3, "Need more data, size=%d, len=%d!\n", length, msg->data_size);
+		DEBUG(self, 3, "Need more data, size=%d, len=%zd!\n", length, msg->data_size);
 		return msg->data_size;
 	}
 	DUMPBUFFER(self, "Rx", msg);
@@ -384,7 +393,7 @@ int obex_object_receive(obex_t *self, obex_object_t *object)
 	if (object->opcode == OBEX_CMD_CONNECT) {
 		DEBUG(self, 2, "We expect a connect-rsp\n");
 		if (hdr->rsp == (OBEX_RSP_SUCCESS | OBEX_FINAL)) {
-			if (msg->data_size >= 9) {
+			if (msg->data_size >= 7) {
 				conn_hdr = (struct obex_connect_hdr *) ((msg->data) + 3);
 				version = conn_hdr->version;
 				mtu     = ntohs(conn_hdr->mtu);
@@ -418,7 +427,7 @@ int obex_object_receive(obex_t *self, obex_object_t *object)
 		if (!object->rx_nonhdr_data)
 			return -1;
 		buf_insert_end(object->rx_nonhdr_data, msg->data, object->headeroffset);
-		DEBUG(self, 4, "Command has %d bytes non-headerdata\n", object->rx_nonhdr_data->data_size);
+		DEBUG(self, 4, "Command has %zd bytes non-headerdata\n", object->rx_nonhdr_data->data_size);
 		buf_remove_begin(msg, object->headeroffset);
 		object->headeroffset = 0;
 	}
@@ -464,7 +473,7 @@ int obex_object_receive(obex_t *self, obex_object_t *object)
 
 		/* Make sure that the msg is big enough for header */
 		if (len > msg->data_size) {
-			DEBUG(self, 1, "Header %d to big. HSize=%d Buffer=%d\n",
+			DEBUG(self, 1, "Header %d to big. HSize=%d Buffer=%zd\n",
 					hi, len, msg->data_size);
 			source = NULL;
 			err = -1;
@@ -523,7 +532,8 @@ int obex_object_receive(obex_t *self, obex_object_t *object)
 obex_t * obex_init(uint16_t vid, uint16_t pid)
 {
 	obex_t *self;
-	int size;
+	libusb_device **list;
+	int i, size = 0;
 	self = malloc(sizeof(obex_t));
 	if (self == NULL)
 		return NULL;
@@ -532,11 +542,27 @@ obex_t * obex_init(uint16_t vid, uint16_t pid)
 	if (libusb_init(&self->usb_ctx) < 0)
 		goto out_err;
 
-	self->usb_dev = libusb_open_device_with_vid_pid(self->usb_ctx, vid, pid);
-	if (self->usb_dev == NULL)
+	size = libusb_get_device_list(self->usb_ctx, &list);
+	if (size < 0)
 		goto out_err;
 
-	if (obex_claim_interface(self) < 0)
+	for (i = 0; i < size; i++) {
+		struct libusb_device_descriptor desc;
+		libusb_device *device = list[i];
+		if (libusb_get_device_descriptor(device, &desc) < 0)
+			continue;
+		if (desc.idVendor != vid || desc.idProduct != pid)
+			continue;
+		if (libusb_open(device, &self->usb_dev) < 0)
+			continue;
+		if (obex_claim_interface(self) == 0)
+			break;
+		libusb_close(self->usb_dev);
+		self->usb_dev = NULL;
+	}
+
+	libusb_free_device_list(list, 1);
+	if (i >= size)
 		goto out_err;
 
 	self->seq_num = 0;
@@ -554,6 +580,12 @@ obex_t * obex_init(uint16_t vid, uint16_t pid)
 	self->tx_msg = buf_new(self->mtu_tx_max);
 	if (self->tx_msg == NULL)
 		goto out_err;
+		
+  size = libusb_control_transfer(self->usb_dev,
+                     LIBUSB_REQUEST_TYPE_VENDOR + LIBUSB_RECIPIENT_INTERFACE,
+                     0x0000001, 0x0000000, 0x0000000, NULL, 0x0000000, 1000);
+  if (size < 0)
+    goto out_err;
 
 	return self;
 
